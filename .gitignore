@@ -43,6 +43,14 @@ nbactions.xml
 out/
 
 # 1BRC
-/measurements*.txt
-/*.out
+data/measurements*.txt
+data/*.out
 out_expected.txt
+
+# Emacs
+*~
+\#*
+.\#*
+
+# Jupyter notebooks
+.ipynb_checkpoints
