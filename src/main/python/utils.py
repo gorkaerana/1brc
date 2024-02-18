@@ -4,7 +4,7 @@ from itertools import count
 from concurrent.futures import ProcessPoolExecutor
 import os
 from pathlib import Path
-from typing import Iterator, TypeAlias
+from typing import Iterable, TypeAlias
 
 
 PathLike: TypeAlias = os.PathLike | str
@@ -83,7 +83,7 @@ def process_batch_from_indices_mmap(*args):
     return process_batch(mm[start : (end - start)])
 
 
-def consolidate_accumulators(accumulators: Iterator[Accumulator]) -> Accumulator:
+def consolidate_accumulators(accumulators: Iterable[Accumulator]) -> Accumulator:
     iter_accs = iter(accumulators)
     consolidated: Accumulator = next(iter_accs)
     for accumulator in iter_accs:
@@ -135,5 +135,5 @@ if __name__ == "__main__":
                 [mm[start : (end - start)] for start, end in index_batch],
             )
             results.extend(result)
-    final_result = consolidate_accumulators(iter(results))
+    final_result = consolidate_accumulators(results)
     # pretty_print_solution(final_result)
