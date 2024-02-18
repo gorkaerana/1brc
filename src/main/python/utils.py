@@ -10,12 +10,13 @@ from typing import Iterator, TypeAlias
 
 
 PathLike: TypeAlias = os.PathLike | str
+# station name -> [min, sum, max, count]
 Accumulator: TypeAlias = dict[bytes, list[float | int]]
 
 
 def pretty_print_solution(d: Accumulator):
     formatted_strings = (
-        f"{k.decode('utf-8')}={v[0]}/{v[1]}/{v[2]}"
+        f"{k.decode('utf-8')}={v[0]}/{v[1] / v[3]}/{v[2]}"
         for k, v in sorted(d.items(), key=itemgetter(0))
     )
     print("{", end="")
@@ -26,16 +27,13 @@ def pretty_print_solution(d: Accumulator):
 def update_in_place(line: bytes, d: Accumulator):
     station, temperature = line.split(b";")
     temp = float(temperature.decode("utf-8"))
-    if station in d:
-        old_min, old_avg, old_max, old_count = old = d[station]
-        if temp < old_min:
-            old[0] = temp
-        old[1] = old_avg + ((temp - old_avg) / old_count)
-        if temp > old_max:
-            old[2] = temp
-        old[3] += 1
-    else:
-        d[station] = [float("+inf"), temp, float("-inf"), 1]
+    if station not in d:
+        d[station] = [float("+inf"), 0, float("-inf"), 0]
+    old_min, _, old_max, _ = old = d[station]
+    if temp < old_min: old[0] = temp
+    old[1] += temp
+    if temp > old_max: old[2] = temp
+    old[3] += 1
 
 
 def batch_indices(filepath: PathLike, n: int) -> tuple[int, ...]:
@@ -89,20 +87,15 @@ def consolidate_accumulators(accumulators: Iterator[Accumulator]) -> Accumulator
     iter_accs = iter(accumulators)
     consolidated: Accumulator = next(iter_accs)
     for accumulator in iter_accs:
-        common_keys = set(consolidated) & set(accumulator)
         for k, v in accumulator.items():
-            if k not in common_keys:
+            if k not in consolidated:
                 consolidated[k] = v
                 continue
-            old_min, old_avg, old_max, old_count = old = consolidated[k]
+            old_min, old_avg, old_max, _ = old = consolidated[k]
             new_min, new_avg, new_max, new_count = accumulator[k]
-            if new_min < old_min:
-                old[0] = new_min
-            old[1] = (1 / (old_count + new_count)) * (
-                (old_count * old_avg) + (new_count * new_avg)
-            )
-            if new_max > old_max:
-                old[2] = new_max
+            if new_min < old_min: old[0] = new_min
+            old[1] = old_avg + new_avg
+            if new_max > old_max: old[2] = new_max
             old[3] += new_count
     return consolidated
 
