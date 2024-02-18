@@ -1,3 +1,4 @@
+import mmap
 from contextlib import contextmanager
 from operator import itemgetter
 from itertools import count
@@ -73,8 +74,15 @@ def process_batch_from_indices(*args):
     (filepath, start, end), *_ = args
     with open(filepath, "rb") as fp:
         fp.seek(start)
-        print(f"Processing {end - start} bytes")
         return process_batch(fp.read(end - start))
+
+
+def process_batch_from_indices_mmap(*args):
+    mm: mmap.mmap
+    start: int
+    end: int
+    (filepath, start, end), *_ = args
+    return process_batch(mm[start:(end-start)])
 
 
 def consolidate_accumulators(accumulators: Iterator[Accumulator]) -> Accumulator:
@@ -102,14 +110,12 @@ def consolidate_accumulators(accumulators: Iterator[Accumulator]) -> Accumulator
 if __name__ == "__main__":
     from itertools import islice
 
-    from rich.progress import track
-
 
     here = Path(__file__).resolve().parent
     data_dir = here.parent.parent.parent / "data"
     n_lines = 10_000
     data_path = data_dir / f"measurements_{n_lines}.txt"
-    data_path = data_dir / "measurements.txt"
+    # data_path = data_dir / "measurements.txt"
 
     def batched(iterable, n):
         # batched('ABCDEFG', 3) --> ABC DEF G
@@ -119,18 +125,21 @@ if __name__ == "__main__":
         while batch := tuple(islice(it, n)):
             yield batch
 
-    indices = batch_indices(data_path, 1250)
+    indices = batch_indices(data_path, 1500)
     index_tuples = zip(indices, indices[1:])
-    from pprint import pprint
     results = []
-    n_workers = 8
-    with ProcessPoolExecutor(max_workers=n_workers) as executor:
-        for i, index_batch in track(enumerate(batched(index_tuples, n_workers))):
+    n_workers = 10
+    with (
+            ProcessPoolExecutor(max_workers=n_workers) as executor,
+            open(data_path, "r+b") as fp,
+            mmap.mmap(fp.fileno(), 0) as mm
+    ):
+        for i, index_batch in enumerate(batched(index_tuples, n_workers)):
             # if i > 0: break
             result = executor.map(
-                process_batch_from_indices,
-                [(data_path, start, end) for start, end in index_batch],
+                process_batch,
+                [mm[start:(end-start)] for start, end in index_batch],
             )
             results.extend(result)
     final_result = consolidate_accumulators(results)
-    pretty_print_solution(final_result)
+    # pretty_print_solution(final_result)
