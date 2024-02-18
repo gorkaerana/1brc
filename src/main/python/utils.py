@@ -1,11 +1,9 @@
 import mmap
-from contextlib import contextmanager
 from operator import itemgetter
 from itertools import count
 from concurrent.futures import ProcessPoolExecutor
 import os
 from pathlib import Path
-from time import perf_counter_ns
 from typing import Iterator, TypeAlias
 
 
@@ -30,9 +28,11 @@ def update_in_place(line: bytes, d: Accumulator):
     if station not in d:
         d[station] = [float("+inf"), 0, float("-inf"), 0]
     old_min, _, old_max, _ = old = d[station]
-    if temp < old_min: old[0] = temp
+    if temp < old_min:
+        old[0] = temp
     old[1] += temp
-    if temp > old_max: old[2] = temp
+    if temp > old_max:
+        old[2] = temp
     old[3] += 1
 
 
@@ -79,8 +79,8 @@ def process_batch_from_indices_mmap(*args):
     mm: mmap.mmap
     start: int
     end: int
-    (filepath, start, end), *_ = args
-    return process_batch(mm[start:(end-start)])
+    (mm, start, end), *_ = args
+    return process_batch(mm[start : (end - start)])
 
 
 def consolidate_accumulators(accumulators: Iterator[Accumulator]) -> Accumulator:
@@ -93,16 +93,17 @@ def consolidate_accumulators(accumulators: Iterator[Accumulator]) -> Accumulator
                 continue
             old_min, old_avg, old_max, _ = old = consolidated[k]
             new_min, new_avg, new_max, new_count = accumulator[k]
-            if new_min < old_min: old[0] = new_min
+            if new_min < old_min:
+                old[0] = new_min
             old[1] = old_avg + new_avg
-            if new_max > old_max: old[2] = new_max
+            if new_max > old_max:
+                old[2] = new_max
             old[3] += new_count
     return consolidated
 
 
 if __name__ == "__main__":
     from itertools import islice
-
 
     here = Path(__file__).resolve().parent
     data_dir = here.parent.parent.parent / "data"
@@ -113,26 +114,26 @@ if __name__ == "__main__":
     def batched(iterable, n):
         # batched('ABCDEFG', 3) --> ABC DEF G
         if n < 1:
-            raise ValueError('n must be at least one')
+            raise ValueError("n must be at least one")
         it = iter(iterable)
         while batch := tuple(islice(it, n)):
             yield batch
 
     indices = batch_indices(data_path, 1500)
     index_tuples = zip(indices, indices[1:])
-    results = []
+    results: list[Accumulator] = []
     n_workers = 10
     with (
-            ProcessPoolExecutor(max_workers=n_workers) as executor,
-            open(data_path, "r+b") as fp,
-            mmap.mmap(fp.fileno(), 0) as mm
+        ProcessPoolExecutor(max_workers=n_workers) as executor,
+        open(data_path, "r+b") as fp,
+        mmap.mmap(fp.fileno(), 0) as mm,
     ):
         for i, index_batch in enumerate(batched(index_tuples, n_workers)):
             # if i > 0: break
             result = executor.map(
                 process_batch,
-                [mm[start:(end-start)] for start, end in index_batch],
+                [mm[start : (end - start)] for start, end in index_batch],
             )
             results.extend(result)
-    final_result = consolidate_accumulators(results)
+    final_result = consolidate_accumulators(iter(results))
     # pretty_print_solution(final_result)
